@@ -332,26 +332,45 @@ class BrowserAutomation:
         try:
             print("Starting browser initialization...")
             playwright = await async_playwright().start()
-            print("Playwright started, launching browser...")
-            
-            # Use non-headless mode for testing with slower timeouts
+            print("Playwright started, launching persistent context with Chrome profile...")
+
+            # Read Chrome profile path from environment or use default
+            chrome_profile_path = os.environ.get("CHROME_PROFILE_PATH", "/chrome-profile/Default")
+            print(f"Using Chrome profile path: {chrome_profile_path}")
+
+            # Launch persistent context with real Chrome and anti-bot flag
             launch_options = {
                 "headless": False,
+                "channel": "chrome",
+                "args": ["--disable-blink-features=AutomationControlled"],
                 "timeout": 60000
             }
-            
+
             try:
-                self.browser = await playwright.chromium.launch(**launch_options)
-                self.browser_context = await self.browser.new_context(viewport={'width': 1024, 'height': 768})
-                print("Browser launched successfully")
+                self.browser_context = await playwright.chromium.launch_persistent_context(
+                    user_data_dir=chrome_profile_path,
+                    viewport={'width': 1024, 'height': 768},
+                    **launch_options
+                )
+                self.browser = self.browser_context.browser
+                print("Persistent context launched successfully")
             except Exception as browser_error:
-                print(f"Failed to launch browser: {browser_error}")
+                print(f"Failed to launch persistent context: {browser_error}")
                 # Try with minimal options
                 print("Retrying with minimal options...")
-                launch_options = {"timeout": 90000}
-                self.browser = await playwright.chromium.launch(**launch_options)
-                self.browser_context = await self.browser.new_context(viewport={'width': 1024, 'height': 768})
-                print("Browser launched with minimal options")
+                launch_options = {
+                    "headless": False,
+                    "channel": "chrome",
+                    "args": ["--disable-blink-features=AutomationControlled"],
+                    "timeout": 90000
+                }
+                self.browser_context = await playwright.chromium.launch_persistent_context(
+                    user_data_dir=chrome_profile_path,
+                    viewport={'width': 1024, 'height': 768},
+                    **launch_options
+                )
+                self.browser = self.browser_context.browser
+                print("Persistent context launched with minimal options")
 
             try:
                 await self.get_current_page()
@@ -366,15 +385,14 @@ class BrowserAutomation:
                 # Navigate directly to google.com instead of about:blank
                 await page.goto("https://www.google.com", wait_until="domcontentloaded", timeout=30000)
                 print("Navigated to google.com")
-            
+
             try:
                 self.browser_context.on("page", self.handle_page_created)
             except Exception as e:
                 print(f"Error setting up page event handler: {e}")
                 traceback.print_exc()
 
-                
-                print("Browser initialization completed successfully")
+            print("Browser initialization completed successfully")
         except Exception as e:
             print(f"Browser startup error: {str(e)}")
             traceback.print_exc()

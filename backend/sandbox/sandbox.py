@@ -3,6 +3,10 @@ from dotenv import load_dotenv
 from utils.logger import logger
 from utils.config import config
 from utils.config import Configuration
+import os
+import shutil
+import requests
+import tempfile
 
 load_dotenv()
 
@@ -79,6 +83,38 @@ def start_supervisord_session(sandbox: Sandbox):
         logger.error(f"Error starting supervisord session: {str(e)}")
         raise e
 
+def zip_chrome_profile(local_profile_path, zip_path=None):
+    """Zip the Chrome profile directory for upload."""
+    import tempfile
+    if zip_path is None:
+        zip_path = os.path.join(tempfile.gettempdir(), 'chrome_profile.zip')
+    if os.path.exists(zip_path):
+        os.remove(zip_path)
+    shutil.make_archive(zip_path.replace('.zip', ''), 'zip', local_profile_path)
+    return zip_path
+
+
+def upload_and_extract_chrome_profile(sandbox, local_profile_path):
+    """Upload zipped Chrome profile to the sandbox and extract it using Daytona SDK."""
+    zip_path = zip_chrome_profile(local_profile_path)
+
+    # Upload the zip file to the sandbox using Daytona SDK
+    with open(zip_path, "rb") as f:
+        content = f.read()
+        sandbox.fs.upload_file(content, "/chrome-profile/chrome_profile.zip")
+    logger.info("Chrome profile uploaded to sandbox via Daytona SDK.")
+
+    # Extract the zip file in the sandbox
+    session_id = "chrome-profile-extract"
+    sandbox.process.create_session(session_id)
+    extract_cmd = "unzip -o /chrome-profile/chrome_profile.zip -d /chrome-profile/Default"
+    sandbox.process.execute_session_command(session_id, SessionExecuteRequest(
+        command=extract_cmd,
+        var_async=False
+    ))
+    logger.info("Chrome profile extracted in sandbox.")
+    return True
+
 def create_sandbox(password: str, project_id: str = None):
     """Create a new sandbox with all required services configured and running."""
     
@@ -105,7 +141,8 @@ def create_sandbox(password: str, project_id: str = None):
             "CHROME_USER_DATA": "",
             "CHROME_DEBUGGING_PORT": "9222",
             "CHROME_DEBUGGING_HOST": "localhost",
-            "CHROME_CDP": ""
+            "CHROME_CDP": "",
+            "CHROME_PROFILE_PATH": "/chrome-profile/Default"
         },
         resources=Resources(
             cpu=2,
@@ -124,6 +161,11 @@ def create_sandbox(password: str, project_id: str = None):
     start_supervisord_session(sandbox)
     
     logger.debug(f"Sandbox environment successfully initialized")
+
+    # Upload and extract Chrome profile from local path
+    local_profile_path = "/chrome-profile"
+    upload_and_extract_chrome_profile(sandbox, local_profile_path)
+
     return sandbox
 
 async def delete_sandbox(sandbox_id: str):

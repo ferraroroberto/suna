@@ -36,6 +36,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend/.env:/app/.env:ro
+      - ./profile/Default:/chrome-profile:ro
     env_file:
       - ./backend/.env
     environment:
