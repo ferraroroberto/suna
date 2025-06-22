@@ -15,6 +15,7 @@ import traceback
 import pytesseract
 from PIL import Image
 import io
+import logging.handlers
 
 #######################################################
 # Action model definitions
@@ -286,6 +287,25 @@ class BrowserAutomation:
         self.pages: List[Page] = []
         self.current_page_index: int = 0
         self.logger = logging.getLogger("browser_automation")
+        self.logger.setLevel(logging.INFO)
+        log_dir = "/var/log"
+        log_file = os.path.join(log_dir, "browser_api.log")
+        try:
+            os.makedirs(log_dir, exist_ok=True)
+            # Try to create the file to check permissions
+            with open(log_file, 'a'):
+                pass
+        except Exception:
+            # Fallback to ./logs if /var/log is not writable
+            log_dir = os.path.join(os.getcwd(), "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            log_file = os.path.join(log_dir, "browser_api.log")
+        file_handler = logging.handlers.RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3)
+        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+        file_handler.setFormatter(formatter)
+        if not self.logger.hasHandlers():
+            self.logger.addHandler(file_handler)
+        
         self.include_attributes = ["id", "href", "src", "alt", "aria-label", "placeholder", "name", "role", "title", "value"]
         self.screenshot_dir = os.path.join(os.getcwd(), "screenshots")
         os.makedirs(self.screenshot_dir, exist_ok=True)
@@ -330,13 +350,13 @@ class BrowserAutomation:
     async def startup(self):
         """Initialize the browser instance on startup"""
         try:
-            print("Starting browser initialization...")
+            self.logger.info("Starting browser initialization...")
             playwright = await async_playwright().start()
-            print("Playwright started, launching persistent context with Chrome profile...")
+            self.logger.info("Playwright started, launching persistent context with Chrome profile...")
 
             # Read Chrome profile path from environment or use default
-            chrome_profile_path = os.environ.get("CHROME_PROFILE_PATH", "/chrome-profile/Default")
-            print(f"Using Chrome profile path: {chrome_profile_path}")
+            chrome_profile_path = os.environ.get("CHROME_PROFILE_PATH", "/chrome-profile")
+            self.logger.info(f"Using Chrome profile path: {chrome_profile_path}")
 
             # Launch persistent context with real Chrome and anti-bot flag
             launch_options = {
@@ -350,14 +370,15 @@ class BrowserAutomation:
                 self.browser_context = await playwright.chromium.launch_persistent_context(
                     user_data_dir=chrome_profile_path,
                     viewport={'width': 1024, 'height': 768},
+                    record_video={"dir": "/tmp/video"},
                     **launch_options
                 )
                 self.browser = self.browser_context.browser
-                print("Persistent context launched successfully")
+                self.logger.info("Persistent context launched successfully")
             except Exception as browser_error:
-                print(f"Failed to launch persistent context: {browser_error}")
+                self.logger.error(f"Failed to launch persistent context: {browser_error}")
                 # Try with minimal options
-                print("Retrying with minimal options...")
+                self.logger.info("Retrying with minimal options...")
                 launch_options = {
                     "headless": False,
                     "channel": "chrome",
@@ -370,31 +391,31 @@ class BrowserAutomation:
                     **launch_options
                 )
                 self.browser = self.browser_context.browser
-                print("Persistent context launched with minimal options")
+                self.logger.info("Persistent context launched with minimal options")
 
             try:
                 await self.get_current_page()
-                print("Found existing page, using it")
+                self.logger.info("Found existing page, using it")
                 self.current_page_index = 0
             except Exception as page_error:
-                print(f"Error finding existing page, creating new one. ( {page_error})")
+                self.logger.warning(f"Error finding existing page, creating new one. ( {page_error})")
                 page = await self.browser_context.new_page()
-                print("New page created successfully")
+                self.logger.info("New page created successfully")
                 self.pages.append(page)
                 self.current_page_index = 0
                 # Navigate directly to google.com instead of about:blank
                 await page.goto("https://www.google.com", wait_until="domcontentloaded", timeout=30000)
-                print("Navigated to google.com")
+                self.logger.info("Navigated to google.com")
 
             try:
                 self.browser_context.on("page", self.handle_page_created)
             except Exception as e:
-                print(f"Error setting up page event handler: {e}")
+                self.logger.error(f"Error setting up page event handler: {e}")
                 traceback.print_exc()
 
-            print("Browser initialization completed successfully")
+            self.logger.info("Browser initialization completed successfully")
         except Exception as e:
-            print(f"Browser startup error: {str(e)}")
+            self.logger.error(f"Browser startup error: {str(e)}")
             traceback.print_exc()
             raise RuntimeError(f"Browser initialization failed: {str(e)}")
             
@@ -410,7 +431,7 @@ class BrowserAutomation:
         await asyncio.sleep(0.5)
         self.pages.append(page)
         self.current_page_index = len(self.pages) - 1
-        print(f"Page created: {page.url}; current page index: {self.current_page_index}")
+        self.logger.info(f"Page created: {page.url}; current page index: {self.current_page_index}")
     
     async def get_current_page(self) -> Page:
         """Get the current active page"""
@@ -488,7 +509,7 @@ class BrowserAutomation:
             """
             
             elements = await page.evaluate(elements_js)
-            print(f"Found {len(elements)} interactive elements in selector map")
+            self.logger.info(f"Found {len(elements)} interactive elements in selector map")
             
             # Create a root element for the tree
             root = DOMElementNode(
@@ -545,7 +566,7 @@ class BrowserAutomation:
                 element_node.parent = root
                 
         except Exception as e:
-            print(f"Error getting selector map: {e}")
+            self.logger.error(f"Error getting selector map: {e}")
             traceback.print_exc()
             # Create a dummy element to avoid breaking tests
             dummy = DOMElementNode(
@@ -613,7 +634,7 @@ class BrowserAutomation:
                 pixels_above = scroll_info.get('pixelsAbove', 0)
                 pixels_below = scroll_info.get('pixelsBelow', 0)
             except Exception as e:
-                print(f"Error getting scroll info: {e}")
+                self.logger.error(f"Error getting scroll info: {e}")
                 pixels_above = 0
                 pixels_below = 0
             
@@ -626,7 +647,7 @@ class BrowserAutomation:
                 pixels_below=pixels_below
             )
         except Exception as e:
-            print(f"Error getting DOM state: {e}")
+            self.logger.error(f"Error getting DOM state: {e}")
             traceback.print_exc()
             # Return a minimal valid state to avoid breaking tests
             dummy_root = DOMElementNode(
@@ -660,7 +681,7 @@ class BrowserAutomation:
             try:
                 await page.wait_for_load_state("networkidle", timeout=60000)  # Increased timeout to 60s
             except Exception as e:
-                print(f"Warning: Network idle timeout, proceeding anyway: {e}")
+                self.logger.warning(f"Network idle timeout, proceeding anyway: {e}")
             
             # Wait for any animations to complete
             # await page.wait_for_timeout(1000)  # Wait 1 second for animations
@@ -676,7 +697,7 @@ class BrowserAutomation:
             
             return base64.b64encode(screenshot_bytes).decode('utf-8')
         except Exception as e:
-            print(f"Error taking screenshot: {e}")
+            self.logger.error(f"Error taking screenshot: {e}")
             traceback.print_exc()
             # Return an empty string rather than failing
             return ""
@@ -693,7 +714,7 @@ class BrowserAutomation:
             await page.screenshot(path=filepath, type='jpeg', quality=60, full_page=False)
             return filepath
         except Exception as e:
-            print(f"Error saving screenshot: {e}")
+            self.logger.error(f"Error saving screenshot: {e}")
             return ""
     
     async def extract_ocr_text_from_screenshot(self, screenshot_base64: str) -> str:
@@ -714,7 +735,7 @@ class BrowserAutomation:
             
             return ocr_text
         except Exception as e:
-            print(f"Error performing OCR: {e}")
+            self.logger.error(f"Error performing OCR: {e}")
             traceback.print_exc()
             return ""
     
@@ -774,7 +795,7 @@ class BrowserAutomation:
                 metadata['viewport_width'] = viewport.get('width', 0)
                 metadata['viewport_height'] = viewport.get('height', 0)
             except Exception as e:
-                print(f"Error getting viewport dimensions: {e}")
+                self.logger.error(f"Error getting viewport dimensions: {e}")
                 metadata['viewport_width'] = 0
                 metadata['viewport_height'] = 0
             
@@ -784,10 +805,10 @@ class BrowserAutomation:
                 ocr_text = await self.extract_ocr_text_from_screenshot(screenshot)
                 metadata['ocr_text'] = ocr_text
             
-            print(f"Got updated state after {action_name}: {len(dom_state.selector_map)} elements")
+            self.logger.info(f"Got updated state after {action_name}: {len(dom_state.selector_map)} elements")
             return dom_state, screenshot, elements, metadata
         except Exception as e:
-            print(f"Error getting updated state after {action_name}: {e}")
+            self.logger.error(f"Error getting updated state after {action_name}: {e}")
             traceback.print_exc()
             # Return empty values in case of error
             return None, "", "", {}
@@ -841,10 +862,10 @@ class BrowserAutomation:
                 content=None
             )
             
-            print(f"Navigation result: success={result.success}, url={result.url}")
+            self.logger.info(f"Navigation result: success={result.success}, url={result.url}")
             return result
         except Exception as e:
-            print(f"Navigation error: {str(e)}")
+            self.logger.error(f"Navigation error: {str(e)}")
             traceback.print_exc()
             # Try to get some state info even after error
             try:
@@ -893,7 +914,7 @@ class BrowserAutomation:
                 content=None
             )
         except Exception as e:
-            print(f"Search error: {str(e)}")
+            self.logger.error(f"Search error: {str(e)}")
             traceback.print_exc()
             # Try to get some state info even after error
             try:
@@ -1010,7 +1031,7 @@ class BrowserAutomation:
                 content=None
             )
         except Exception as e:
-            print(f"Error in click_coordinates: {e}")
+            self.logger.error(f"Error in click_coordinates: {e}")
             traceback.print_exc()
             
             # Try to get state even after error
@@ -1062,7 +1083,7 @@ class BrowserAutomation:
                 )
 
             element_to_click = selector_map[action.index]
-            print(f"Attempting to click element: {element_to_click}")
+            self.logger.info(f"Attempting to click element: {element_to_click}")
 
             # Construct a more reliable selector using JavaScript evaluation
             # Find the element based on its properties captured in selector_map
@@ -1099,22 +1120,22 @@ class BrowserAutomation:
                     # Add timeout and wait for element to be stable
                     await target_element_handle.click(timeout=5000) 
                     click_success = True
-                    print(f"Successfully clicked element handle for index {action.index}")
+                    self.logger.info(f"Successfully clicked element handle for index {action.index}")
                 except Exception as click_error:
                     error_message = f"Error clicking element handle: {click_error}"
-                    print(error_message)
+                    self.logger.error(error_message)
                     # Optional: Add fallback methods here if needed
                     # e.g., target_element_handle.dispatch_event('click')
             else:
                  error_message = f"Could not locate the target element handle for index {action.index} using JS script."
-                 print(error_message)
+                 self.logger.error(error_message)
 
 
             # Wait for potential page changes/network activity
             try:
                 await page.wait_for_load_state("networkidle", timeout=5000)
             except Exception as wait_error:
-                print(f"Timeout or error waiting for network idle after click: {wait_error}")
+                self.logger.warning(f"Timeout or error waiting for network idle after click: {wait_error}")
             await asyncio.sleep(1)
 
             # Get updated state after action
@@ -1132,7 +1153,7 @@ class BrowserAutomation:
             )
             
         except Exception as e:
-            print(f"Error in click_element: {e}")
+            self.logger.error(f"Error in click_element: {e}")
             traceback.print_exc()
             # Try to get state even after error
             try:
@@ -1306,20 +1327,20 @@ class BrowserAutomation:
     async def open_tab(self, action: OpenTabAction = Body(...)):
         """Open a new tab with the specified URL"""
         try:
-            print(f"Attempting to open new tab with URL: {action.url}")
+            self.logger.info(f"Attempting to open new tab with URL: {action.url}")
             # Create new page in same browser instance
             new_page = await self.browser_context.new_page()
-            print(f"New page created successfully")
+            self.logger.info(f"New page created successfully")
             
             # Navigate to the URL
             await new_page.goto(action.url, wait_until="domcontentloaded")
             await new_page.wait_for_load_state("networkidle", timeout=10000)
-            print(f"Navigated to URL in new tab: {action.url}")
+            self.logger.info(f"Navigated to URL in new tab: {action.url}")
             
             # Add to page list and make it current
             self.pages.append(new_page)
             self.current_page_index = len(self.pages) - 1
-            print(f"New tab added as index {self.current_page_index}")
+            self.logger.info(f"New tab added as index {self.current_page_index}")
             
             # Get updated state after action
             dom_state, screenshot, elements, metadata = await self.get_updated_browser_state(f"open_tab({action.url})")
@@ -1335,10 +1356,10 @@ class BrowserAutomation:
                 content=None
             )
         except Exception as e:
-            print("****"*10)
-            print(f"Error opening tab: {e}")
-            print(traceback.format_exc())
-            print("****"*10)
+            self.logger.error("****"*10)
+            self.logger.error(f"Error opening tab: {e}")
+            self.logger.error(traceback.format_exc())
+            self.logger.error("****"*10)
             return self.build_action_result(
                 False,
                 str(e),

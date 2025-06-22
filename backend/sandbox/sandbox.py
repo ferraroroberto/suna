@@ -5,8 +5,6 @@ from utils.config import config
 from utils.config import Configuration
 import os
 import shutil
-import requests
-import tempfile
 
 load_dotenv()
 
@@ -142,7 +140,7 @@ def create_sandbox(password: str, project_id: str = None):
             "CHROME_DEBUGGING_PORT": "9222",
             "CHROME_DEBUGGING_HOST": "localhost",
             "CHROME_CDP": "",
-            "CHROME_PROFILE_PATH": "/chrome-profile/Default"
+            "CHROME_PROFILE_PATH": "/chrome-profile"
         },
         resources=Resources(
             cpu=2,

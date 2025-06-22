@@ -17,7 +17,7 @@ services:
       - ANONYMIZED_TELEMETRY=${ANONYMIZED_TELEMETRY:-false}
       - CHROME_PATH=/usr/bin/google-chrome
       - CHROME_USER_DATA=/app/data/chrome_data
-      - CHROME_PERSISTENT_SESSION=${CHROME_PERSISTENT_SESSION:-false}
+      - CHROME_PERSISTENT_SESSION=${CHROME_PERSISTENT_SESSION:-true}
       - CHROME_CDP=${CHROME_CDP:-http://localhost:9222}
       - DISPLAY=:99
       - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
@@ -28,7 +28,7 @@ services:
       - CHROME_DEBUGGING_PORT=9222
       - CHROME_DEBUGGING_HOST=localhost
       - CHROME_FLAGS=${CHROME_FLAGS:-"--single-process --no-first-run --no-default-browser-check --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-breakpad --disable-component-extensions-with-background-pages --disable-dev-shm-usage --disable-extensions --disable-features=TranslateUI --disable-ipc-flooding-protection --disable-renderer-backgrounding --enable-features=NetworkServiceInProcess2 --force-color-profile=srgb --metrics-recording-only --mute-audio --no-sandbox --disable-gpu"}
-      - CHROME_PROFILE_PATH=/chrome-profile/Default
+      - CHROME_PROFILE_PATH=/chrome-profile
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
       - ./profile/Default:/chrome-profile:ro
