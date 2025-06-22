@@ -1,0 +1,22 @@
+services:
+  browser:
+    build:
+      context: .
+      dockerfile: Dockerfile.browser
+    ports:
+      - "9222:9222"  # Only needed if you want to debug DevTools externally (optional)
+    volumes:
+      - .:/workspace
+      - E:/onedrive/Documentos/Roberto/projects/automation/suna/suna/profile:/chrome_profile_src:ro
+
+  pw_test:
+    build:
+      context: .
+      dockerfile: Dockerfile.playwright
+    working_dir: /workspace
+    command: >
+      python /workspace/quick_playwright_profile_test.py
+    depends_on:
+      - browser
+    volumes:
+      - .:/workspace

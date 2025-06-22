@@ -1,0 +1,9 @@
+# Dockerfile.playwright
+
+FROM mcr.microsoft.com/playwright/python:v1.44.0
+
+# Install Playwright Python package and Chromium browser
+RUN pip install --no-cache-dir playwright && \
+    python -m playwright install chromium
+
+WORKDIR /workspace

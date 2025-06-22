@@ -1,0 +1,10 @@
+FROM mcr.microsoft.com/playwright/python:v1.44.0
+
+RUN apt-get update && apt-get install -y socat && \
+    pip install --no-cache-dir playwright && \
+    python -m playwright install chromium
+
+COPY launch_browser.sh /launch_browser.sh
+RUN chmod +x /launch_browser.sh
+
+CMD ["/launch_browser.sh"]
