@@ -288,23 +288,27 @@ class BrowserAutomation:
         self.current_page_index: int = 0
         self.logger = logging.getLogger("browser_automation")
         self.logger.setLevel(logging.INFO)
+        # StreamHandler -> stdout (live logs)
+        stream_handler = logging.StreamHandler()
+        stream_formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+        stream_handler.setFormatter(stream_formatter)
+        self.logger.addHandler(stream_handler)
+        # RotatingFileHandler -> file (with fallback)
         log_dir = "/var/log"
         log_file = os.path.join(log_dir, "browser_api.log")
         try:
             os.makedirs(log_dir, exist_ok=True)
-            # Try to create the file to check permissions
-            with open(log_file, 'a'):
+            with open(log_file, "a"):
                 pass
-        except Exception:
-            # Fallback to ./logs if /var/log is not writable
+        except PermissionError:
             log_dir = os.path.join(os.getcwd(), "logs")
             os.makedirs(log_dir, exist_ok=True)
             log_file = os.path.join(log_dir, "browser_api.log")
-        file_handler = logging.handlers.RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3)
-        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-        file_handler.setFormatter(formatter)
-        if not self.logger.hasHandlers():
-            self.logger.addHandler(file_handler)
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_file, maxBytes=5 * 1024 * 1024, backupCount=3)
+        file_handler.setFormatter(stream_formatter)
+        self.logger.addHandler(file_handler)
+        self.logger.propagate = False
         
         self.include_attributes = ["id", "href", "src", "alt", "aria-label", "placeholder", "name", "role", "title", "value"]
         self.screenshot_dir = os.path.join(os.getcwd(), "screenshots")
