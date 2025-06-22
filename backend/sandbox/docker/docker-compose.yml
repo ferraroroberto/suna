@@ -31,7 +31,7 @@ services:
       - CHROME_PROFILE_PATH=/chrome-profile
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
-      - ./profile/Default:/chrome-profile:ro
+      - ./profile/Default:/chrome-profile
     restart: unless-stopped
     shm_size: '2gb'
     cap_add:
